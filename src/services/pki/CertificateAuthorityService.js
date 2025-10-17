@@ -121,6 +121,60 @@ class CertificateAuthorityService {
     });
   }
 
+  async getUserSigningMaterial(userOrId, { forceRenew = false } = {}) {
+    if (!userOrId) throw new Error('User reference is required');
+
+    await this.ensureReady();
+
+    const baseUser = await this.#resolveUser(userOrId);
+    if (!baseUser) throw new Error('User not found');
+
+    const ensured = await this.ensureUserCertificate(baseUser, { force: forceRenew });
+    const currentUser = ensured?.user
+      || (await this.db.findOne('users', { id: baseUser.id }))
+      || baseUser;
+
+    const userId = currentUser && currentUser.id ? String(currentUser.id) : String(baseUser.id);
+    const userDir = path.join(this.baseDir, 'users', userId);
+    const keyPath = path.join(userDir, 'keys', 'key.pem');
+    const certPath = path.join(userDir, 'certs', 'cert.pem');
+
+    let keyPem;
+    let certPem;
+    try {
+      keyPem = fs.readFileSync(keyPath, 'utf8');
+    } catch (err) {
+      const error = new Error('User private key is not available');
+      error.code = 'KEY_MISSING';
+      throw error;
+    }
+
+    try {
+      certPem = fs.readFileSync(certPath, 'utf8');
+    } catch (err) {
+      const error = new Error('User certificate is not available');
+      error.code = 'CERT_MISSING';
+      throw error;
+    }
+
+    const chainPems = [];
+    if (this.ca?.paths?.cert && fs.existsSync(this.ca.paths.cert)) {
+      try {
+        chainPems.push(fs.readFileSync(this.ca.paths.cert, 'utf8'));
+      } catch (err) {
+        console.warn('Unable to read CA certificate for chain', err);
+      }
+    }
+
+    return {
+      user: currentUser,
+      keyPem,
+      certPem,
+      chainPems,
+      certificate: currentUser?.pki?.certificate || null
+    };
+  }
+
   async getRootCertificate({ format = 'der' } = {}) {
     await this.ensureReady();
     return this.#withLock(async () => {
@@ -281,6 +335,18 @@ class CertificateAuthorityService {
       }
     }
     return false;
+  }
+
+  async #resolveUser(userOrId) {
+    if (!userOrId) return null;
+    if (typeof userOrId === 'object' && userOrId.id) {
+      return userOrId;
+    }
+    const id = typeof userOrId === 'string' || typeof userOrId === 'number'
+      ? String(userOrId)
+      : null;
+    if (!id) return null;
+    return this.db.findOne('users', { id });
   }
 
   async #exportUsersSnapshot() {
