@@ -12,10 +12,30 @@ function buildSecurityError(message, code, statusCode) {
   return err;
 }
 
+function stripCertificatePaths(container) {
+  if (!container || typeof container !== 'object') return;
+  const cert = container.certificate;
+  if (!cert || typeof cert !== 'object') return;
+  const sanitized = Object.assign({}, cert);
+  delete sanitized.keyPath;
+  delete sanitized.certPath;
+  delete sanitized.csrPath;
+  delete sanitized.publicKeyPath;
+  delete sanitized.privateKeyPath;
+  delete sanitized.configPath;
+  delete sanitized.rawPem;
+  container.certificate = sanitized;
+}
+
 function sanitizeUser(user) {
   if (!user) return null;
   const { password, passwordHash, secretToken, ...rest } = user;
-  return rest;
+  const clone = JSON.parse(JSON.stringify(rest));
+  stripCertificatePaths(clone);
+  if (clone.pki && typeof clone.pki === 'object') {
+    stripCertificatePaths(clone.pki);
+  }
+  return clone;
 }
 
 function ensureOwnership(user, ownerId) {

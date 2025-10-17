@@ -14,6 +14,9 @@ class WebPushService {
     this.vapidPublicJwkPath = path.join(this.dataDir, 'vapid_pub.jwk.json');
     this.subscriptionsPath = path.join(this.dataDir, 'subscriptions.json');
 
+    this.db = options.db || null;
+    this.collection = options.collection || 'webpushSubscriptions';
+
     this.rateLimitWindowMs = Number.isFinite(options.rateLimitWindowMs)
       ? options.rateLimitWindowMs
       : 60 * 1000;
@@ -28,6 +31,7 @@ class WebPushService {
       : 'mailto:network@fitfak.net';
 
     this.subscriptions = [];
+    this.subscriptionIndex = new Map();
     this.rateMap = new Map();
     this.vapid = null;
   }
@@ -35,7 +39,8 @@ class WebPushService {
   async init() {
     await fsp.mkdir(this.dataDir, { recursive: true });
     await this.#ensureVapid();
-    await this.#loadSubscriptions();
+    if (this.db) await this.#loadSubscriptionsFromDb();
+    else await this.#loadSubscriptionsFromFile();
   }
 
   async #ensureVapid() {
@@ -61,16 +66,41 @@ class WebPushService {
     }
   }
 
-  async #loadSubscriptions() {
+  async #loadSubscriptionsFromFile() {
     try {
       const raw = await fsp.readFile(this.subscriptionsPath, 'utf8');
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed)) {
-        this.subscriptions = parsed.filter((entry) => this.#isValidSubscription(entry));
+        this.subscriptions = parsed
+          .filter((entry) => this.#isValidStoredSubscription(entry))
+          .map((entry) => ({
+            id: entry.id || null,
+            ownerId: entry.ownerId,
+            endpoint: entry.endpoint,
+            keys: entry.keys,
+            userAgent: entry.userAgent || null,
+            createdAt: entry.createdAt || null,
+            updatedAt: entry.updatedAt || null,
+            lastSentAt: entry.lastSentAt || null,
+          }));
+      } else {
+        this.subscriptions = [];
       }
     } catch (err) {
       this.subscriptions = [];
     }
+    this.#rebuildIndex();
+  }
+
+  async #loadSubscriptionsFromDb() {
+    try {
+      const docs = await this.db.find(this.collection, {});
+      this.subscriptions = docs.map((doc) => this.#fromDbDoc(doc));
+    } catch (err) {
+      console.warn('Failed to load web push subscriptions from database', err);
+      this.subscriptions = [];
+    }
+    this.#rebuildIndex();
   }
 
   async #writeAtomic(filePath, payload) {
@@ -80,16 +110,134 @@ class WebPushService {
   }
 
   async #saveSubscriptions() {
-    await this.#writeAtomic(this.subscriptionsPath, JSON.stringify(this.subscriptions, null, 2));
+    if (this.db) return;
+    const payload = this.subscriptions.map((entry) => ({
+      id: entry.id || null,
+      ownerId: entry.ownerId,
+      endpoint: entry.endpoint,
+      keys: entry.keys,
+      userAgent: entry.userAgent || null,
+      createdAt: entry.createdAt || null,
+      updatedAt: entry.updatedAt || null,
+      lastSentAt: entry.lastSentAt || null,
+    }));
+    await this.#writeAtomic(this.subscriptionsPath, JSON.stringify(payload, null, 2));
   }
 
-  #isValidSubscription(value) {
+  #indexKey(ownerId, endpoint) {
+    return `${ownerId}::${endpoint}`;
+  }
+
+  #rebuildIndex() {
+    this.subscriptionIndex.clear();
+    for (const entry of this.subscriptions) {
+      if (!entry.ownerId || !entry.endpoint) continue;
+      this.subscriptionIndex.set(this.#indexKey(entry.ownerId, entry.endpoint), entry);
+    }
+  }
+
+  #fromDbDoc(doc) {
+    return {
+      id: doc.id,
+      ownerId: doc.ownerId,
+      endpoint: doc.endpoint,
+      keys: doc.keys || {},
+      userAgent: doc.userAgent || null,
+      createdAt: doc.createdAt || null,
+      updatedAt: doc.updatedAt || null,
+      lastSentAt: doc.lastSentAt || null,
+    };
+  }
+
+  #publicSubscription(entry) {
+    return {
+      id: entry.id || null,
+      ownerId: entry.ownerId,
+      endpoint: entry.endpoint,
+      userAgent: entry.userAgent || null,
+      createdAt: entry.createdAt || null,
+      updatedAt: entry.updatedAt || null,
+      lastSentAt: entry.lastSentAt || null,
+    };
+  }
+
+  #isValidSubscriptionPayload(value) {
     if (!value || typeof value !== 'object') return false;
     if (typeof value.endpoint !== 'string' || !value.endpoint.trim()) return false;
     if (!value.keys || typeof value.keys !== 'object') return false;
     const { p256dh, auth } = value.keys;
-    if (typeof p256dh !== 'string' || typeof auth !== 'string') return false;
+    if (typeof p256dh !== 'string' || !p256dh.trim()) return false;
+    if (typeof auth !== 'string' || !auth.trim()) return false;
     return true;
+  }
+
+  #isValidStoredSubscription(value) {
+    if (!this.#isValidSubscriptionPayload(value)) return false;
+    return typeof value.ownerId === 'string' && value.ownerId.trim().length > 0;
+  }
+
+  #normalizeSubscriptionPayload(subscription) {
+    if (!this.#isValidSubscriptionPayload(subscription)) {
+      throw new Error('Invalid subscription payload');
+    }
+    return {
+      endpoint: subscription.endpoint.trim(),
+      keys: {
+        p256dh: subscription.keys.p256dh.trim(),
+        auth: subscription.keys.auth.trim(),
+      }
+    };
+  }
+
+  async #upsertSubscription(entry) {
+    if (!this.db) {
+      await this.#saveSubscriptions();
+      return entry;
+    }
+
+    if (entry.id) {
+      const updated = await this.db.update(this.collection, entry.id, {
+        ownerId: entry.ownerId,
+        endpoint: entry.endpoint,
+        keys: entry.keys,
+        userAgent: entry.userAgent || null,
+        lastSentAt: entry.lastSentAt || null,
+      });
+      if (updated) {
+        entry.updatedAt = updated.updatedAt || entry.updatedAt;
+        entry.createdAt = updated.createdAt || entry.createdAt;
+        entry.lastSentAt = updated.lastSentAt || entry.lastSentAt;
+      }
+      return entry;
+    }
+
+    const inserted = await this.db.insert(this.collection, {
+      ownerId: entry.ownerId,
+      endpoint: entry.endpoint,
+      keys: entry.keys,
+      userAgent: entry.userAgent || null,
+      lastSentAt: entry.lastSentAt || null,
+    });
+    entry.id = inserted.id;
+    entry.createdAt = inserted.createdAt || entry.createdAt;
+    entry.updatedAt = inserted.updatedAt || entry.updatedAt;
+    entry.lastSentAt = inserted.lastSentAt || entry.lastSentAt;
+    return entry;
+  }
+
+  async #removeFromStore(entry, { persist = true } = {}) {
+    if (!entry) return;
+    if (this.db) {
+      if (entry.id) {
+        try { await this.db.remove(this.collection, entry.id); } catch (err) { console.warn('Failed to remove subscription', err); }
+      }
+      return;
+    }
+    if (persist) await this.#saveSubscriptions();
+  }
+
+  #isValidSubscription(value) {
+    return this.#isValidSubscriptionPayload(value);
   }
 
   base64url(buffer) {
@@ -157,37 +305,82 @@ class WebPushService {
     return entry.count <= this.rateLimitMax;
   }
 
-  async subscribe(subscription) {
-    if (!this.#isValidSubscription(subscription)) {
-      throw new Error('Invalid subscription payload');
+  async subscribeForUser(user, subscription, { userAgent } = {}) {
+    if (!user || !user.id) throw new Error('ownerId is required for subscription');
+    if (this.db) {
+      await this.#loadSubscriptionsFromDb();
     }
-    const exists = this.subscriptions.find((item) => item.endpoint === subscription.endpoint);
-    if (exists) {
-      return { created: false };
+    const normalized = this.#normalizeSubscriptionPayload(subscription);
+    const ownerId = String(user.id);
+    const key = this.#indexKey(ownerId, normalized.endpoint);
+    let entry = this.subscriptionIndex.get(key);
+    const nowIso = new Date().toISOString();
+
+    if (entry) {
+      entry.keys = normalized.keys;
+      entry.userAgent = userAgent || entry.userAgent || null;
+      entry.updatedAt = nowIso;
+      await this.#upsertSubscription(entry);
+      return { created: false, subscription: this.#publicSubscription(entry) };
     }
-    this.subscriptions.push({
-      endpoint: subscription.endpoint,
-      keys: {
-        p256dh: subscription.keys.p256dh,
-        auth: subscription.keys.auth
-      }
-    });
-    await this.#saveSubscriptions();
-    return { created: true };
+
+    entry = {
+      id: null,
+      ownerId,
+      endpoint: normalized.endpoint,
+      keys: normalized.keys,
+      userAgent: userAgent || null,
+      createdAt: nowIso,
+      updatedAt: nowIso,
+      lastSentAt: null,
+    };
+    this.subscriptions.push(entry);
+    this.subscriptionIndex.set(key, entry);
+    await this.#upsertSubscription(entry);
+    return { created: true, subscription: this.#publicSubscription(entry) };
   }
 
-  async unsubscribe(endpoint) {
-    if (typeof endpoint !== 'string') return false;
-    const before = this.subscriptions.length;
-    this.subscriptions = this.subscriptions.filter((item) => item.endpoint !== endpoint);
-    if (this.subscriptions.length !== before) {
-      await this.#saveSubscriptions();
-      return true;
+  async subscribe(subscription, context = {}) {
+    const ownerId = context.ownerId || context.userId;
+    if (!ownerId) throw new Error('ownerId is required for subscription');
+    return this.subscribeForUser({ id: ownerId }, subscription, { userAgent: context.userAgent || null });
+  }
+
+  async unsubscribe(ownerId, identifier) {
+    if (identifier === undefined) {
+      identifier = ownerId;
+      ownerId = null;
     }
-    return false;
+    if (!ownerId) throw new Error('ownerId is required to unsubscribe');
+    if (this.db) {
+      await this.#loadSubscriptionsFromDb();
+    }
+    if (typeof identifier !== 'string' || !identifier.trim()) return false;
+    const token = identifier.trim();
+    const index = this.subscriptions.findIndex((sub) => sub.ownerId === ownerId && (sub.id === token || sub.endpoint === token));
+    if (index === -1) return false;
+    const [removed] = this.subscriptions.splice(index, 1);
+    this.subscriptionIndex.delete(this.#indexKey(removed.ownerId, removed.endpoint));
+    await this.#removeFromStore(removed);
+    return true;
+  }
+
+  async listByOwner(ownerId) {
+    if (!ownerId) return [];
+    if (this.db) {
+      const docs = await this.db.find(this.collection, { ownerId });
+      return docs.map((doc) => this.#publicSubscription(this.#fromDbDoc(doc)));
+    }
+    return this.subscriptions
+      .filter((sub) => sub.ownerId === ownerId)
+      .map((sub) => this.#publicSubscription(sub));
   }
 
   async sendToAll(message = {}, options = {}) {
+    if (this.db) {
+      await this.#loadSubscriptionsFromDb();
+    }
+
     const vapid = await this.#ensureVapid();
     const payloadBuffer = Buffer.from(JSON.stringify(message), 'utf8');
     const ttl = Number.isFinite(options.ttl) ? options.ttl : this.defaultTtl;
@@ -196,23 +389,47 @@ class WebPushService {
       : this.subject;
 
     const results = [];
-    let mutated = false;
+    const removed = [];
+    const updatedLastSent = [];
+    let filePersistNeeded = false;
 
     for (let i = this.subscriptions.length - 1; i >= 0; i -= 1) {
       const sub = this.subscriptions[i];
       try {
         const response = await this.#sendNotification(sub, payloadBuffer, { ttl, subject, vapid });
         results.push(Object.assign({ endpoint: sub.endpoint }, response));
-        if (response.statusCode === 404 || response.statusCode === 410) {
-          this.subscriptions.splice(i, 1);
-          mutated = true;
+        if (response.statusCode >= 200 && response.statusCode < 300) {
+          const sentAt = new Date().toISOString();
+          sub.lastSentAt = sentAt;
+          updatedLastSent.push(sub);
+        } else if (response.statusCode === 404 || response.statusCode === 410) {
+          const [removedSub] = this.subscriptions.splice(i, 1);
+          if (removedSub) {
+            this.subscriptionIndex.delete(this.#indexKey(removedSub.ownerId, removedSub.endpoint));
+            removed.push(removedSub);
+            if (!this.db) filePersistNeeded = true;
+          }
         }
       } catch (err) {
         results.push({ endpoint: sub.endpoint, error: err.message || String(err) });
       }
     }
 
-    if (mutated) {
+    if (removed.length) {
+      if (this.db) {
+        await Promise.all(removed.map((entry) => this.#removeFromStore(entry)));
+      }
+    }
+
+    if (updatedLastSent.length) {
+      if (this.db) {
+        await Promise.all(updatedLastSent.map((entry) => this.db.update(this.collection, entry.id, { lastSentAt: entry.lastSentAt })));
+      } else {
+        filePersistNeeded = true;
+      }
+    }
+
+    if (filePersistNeeded && !this.db) {
       await this.#saveSubscriptions();
     }
 
