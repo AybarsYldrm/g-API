@@ -2,21 +2,7 @@
 
 const path = require('path');
 
-function parseNumber(value, fallback) {
-  if (value === undefined || value === null || value === '') return fallback;
-  const num = Number(value);
-  if (!Number.isFinite(num)) return fallback;
-  return num;
-}
-
-function parseBoolean(value, fallback) {
-  if (value === undefined || value === null || value === '') return fallback;
-  if (typeof value === 'boolean') return value;
-  const normalized = String(value).trim().toLowerCase();
-  if (['1', 'true', 'yes', 'y', 'on'].includes(normalized)) return true;
-  if (['0', 'false', 'no', 'n', 'off'].includes(normalized)) return false;
-  return fallback;
-}
+const { parseNumber, parseBoolean, parseStringList } = require('./utils');
 
 function buildHeaders() {
   const headerValue = process.env.PADES_TSA_AUTH_HEADER || process.env.PADES_TSA_AUTHORIZATION;
@@ -25,6 +11,12 @@ function buildHeaders() {
 }
 
 const defaultUploadDir = path.join(process.cwd(), 'data', 'uploads', 'pades');
+const defaultAcceptTypes = ['application/pdf'];
+
+const uploadAccept = (() => {
+  const configured = parseStringList(process.env.PADES_UPLOAD_ACCEPT, defaultAcceptTypes);
+  return configured.length ? configured : defaultAcceptTypes.slice();
+})();
 
 module.exports = {
   enabled: parseBoolean(process.env.PADES_ENABLED, true) !== false,
@@ -47,7 +39,7 @@ module.exports = {
   upload: {
     directory: process.env.PADES_UPLOAD_DIR || defaultUploadDir,
     maxBytes: parseNumber(process.env.PADES_UPLOAD_MAX_BYTES, 20 * 1024 * 1024),
-    accept: ['application/pdf']
+    accept: uploadAccept
   },
   download: {
     directory: process.env.PADES_DOWNLOAD_DIR || 'pades',
