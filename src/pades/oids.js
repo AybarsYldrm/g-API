@@ -5,6 +5,7 @@ const OIDS = {
   signedData: '1.2.840.113549.1.7.2',
   contentType: '1.2.840.113549.1.9.3',
   messageDigest: '1.2.840.113549.1.9.4',
+  tstInfo: '1.2.840.113549.1.9.16.1.4',
   signingCertificateV2: '1.2.840.113549.1.9.16.2.47',
   signatureTimeStampToken: '1.2.840.113549.1.9.16.2.14',
   sha256: '2.16.840.1.101.3.4.2.1',
