@@ -82,6 +82,8 @@ async function createAppContext(config, options = {}) {
       rateLimitMax: resolvedConfig.webpush.rateLimitMax,
       defaultTtl: resolvedConfig.webpush.defaultTtl,
       subject: resolvedConfig.webpush.subject,
+      db,
+      collection: resolvedConfig.webpush.collection || 'webpushSubscriptions',
     });
     await webPushService.init();
   }
@@ -95,7 +97,7 @@ async function createAppContext(config, options = {}) {
     idFactory,
   });
 
-  const schema = createSchema({ db });
+  const schema = createSchema({ db, webPushService });
 
   const padesService = (!skipPades && resolvedConfig.pades && resolvedConfig.pades.enabled !== false && pkiService)
     ? new PadesService({ pkiService, config: resolvedConfig.pades })
@@ -171,27 +173,35 @@ function registerWebPushRoutes(http, webPushService) {
       if (!webPushService.checkRateLimit(ip)) {
         return http.sendJson(res, 429, { success: false, message: 'Rate limit exceeded' });
       }
-      const result = await webPushService.subscribe(req.body || {});
+      const result = await webPushService.subscribeForUser(req.user, req.body || {}, {
+        userAgent: req.headers['user-agent'] || null,
+      });
       const status = result.created ? 201 : 200;
-      http.sendJson(res, status, { success: true, created: result.created });
+      http.sendJson(res, status, {
+        success: true,
+        created: result.created,
+        subscription: result.subscription,
+      });
     } catch (err) {
-      http.sendJson(res, 400, { success: false, message: err.message || 'Subscription failed' });
+      http.sendJson(res, err.statusCode || 400, { success: false, message: err.message || 'Subscription failed' });
     }
-  });
+  }, { auth: true, rateLimit: { windowMs: 60_000, max: 20 } });
 
   http.addRoute('POST', '/push/unsubscribe', async (req, res) => {
     try {
       const endpoint = typeof req.body?.endpoint === 'string' ? req.body.endpoint.trim() : '';
-      if (!endpoint) {
-        return http.sendJson(res, 400, { success: false, message: 'endpoint is required' });
+      const id = typeof req.body?.id === 'string' ? req.body.id.trim() : '';
+      const identifier = endpoint || id;
+      if (!identifier) {
+        return http.sendJson(res, 400, { success: false, message: 'endpoint or id is required' });
       }
-      const removed = await webPushService.unsubscribe(endpoint);
+      const removed = await webPushService.unsubscribe(req.user.id, identifier);
       const status = removed ? 200 : 404;
       http.sendJson(res, status, { success: removed, removed });
     } catch (err) {
-      http.sendJson(res, 500, { success: false, message: err.message || 'Unsubscribe failed' });
+      http.sendJson(res, err.statusCode || 500, { success: false, message: err.message || 'Unsubscribe failed' });
     }
-  });
+  }, { auth: true, rateLimit: { windowMs: 60_000, max: 40 } });
 
   http.addRoute('POST', '/push/send', async (req, res) => {
     try {
@@ -316,6 +326,7 @@ async function registerCoreRoutes(http, context, options = {}) {
           req,
           authService: context.authService,
           user: req.user,
+          webPushService: context.webPushService,
         };
 
         const result = await execute({

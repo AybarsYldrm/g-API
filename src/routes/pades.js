@@ -31,10 +31,15 @@ module.exports = function registerPadesRoutes(http, { padesService, downloadServ
   }, {
     auth: true,
     upload: {
-      folder: uploadCfg.folder,
+      directory: uploadCfg.directory,
+      baseDir: uploadCfg.baseDir,
       maxBytes: uploadCfg.maxBytes,
       accept: uploadCfg.accept,
       naming: uploadCfg.naming
+    },
+    rateLimit: {
+      windowMs: 60_000,
+      max: 10
     }
   });
 };

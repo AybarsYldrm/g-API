@@ -376,6 +376,46 @@ class HttpService {
   }
 
   // ---------- multipart streaming parser ----------
+  _normalizeUploadOptions(upload = {}) {
+    const normalized = Object.assign({}, upload);
+
+    const baseDir = upload && upload.baseDir
+      ? path.resolve(upload.baseDir)
+      : this.publicPath;
+
+    const requested = upload && (upload.directory || upload.folder || '');
+
+    let directory;
+    if (requested) {
+      directory = path.isAbsolute(requested)
+        ? path.resolve(requested)
+        : path.resolve(baseDir, requested);
+    } else {
+      directory = baseDir;
+    }
+
+    const restrict = upload?.restrictToBase !== false;
+    if (restrict && directory) {
+      const relative = path.relative(baseDir, directory);
+      if (relative.startsWith('..') || path.isAbsolute(relative)) {
+        throw new Error('Upload directory escapes configured baseDir');
+      }
+    }
+
+    normalized.baseDir = baseDir;
+    normalized.directory = directory;
+    normalized.restrictToBase = restrict;
+    normalized.maxBytes = Number.isFinite(upload?.maxBytes)
+      ? upload.maxBytes
+      : this.uploadDefaultLimit;
+    normalized.maxKBps = Number.isFinite(upload?.maxKBps)
+      ? upload.maxKBps
+      : (this.uploadDefaultMaxKBps || null);
+    normalized.accept = Array.isArray(upload?.accept) ? upload.accept.slice() : [];
+
+    return normalized;
+  }
+
   _handleMultipartStream(req, res, routeOptions, cb) {
     const contentType = req.headers['content-type'] || '';
     const m = contentType.match(/boundary=(?:"([^"]+)"|([^;]+))/i);
@@ -387,13 +427,29 @@ class HttpService {
     const fields = {};
     const files = [];
 
-    const maxBytes = routeOptions?.upload?.maxBytes || this.uploadDefaultLimit;
-    const maxKBps = routeOptions?.upload?.maxKBps || this.uploadDefaultMaxKBps || null;
-    const accept = routeOptions?.upload?.accept || [];
+    let uploadOptions;
+    try {
+      uploadOptions = this._normalizeUploadOptions(routeOptions?.upload || {});
+    } catch (err) {
+      console.error('upload path resolution error', err);
+      this.sendJson(res, 500, { success: false, message: 'Upload path configuration error' });
+      req.destroy();
+      return;
+    }
 
-    let folder = this.publicPath;
-    if (routeOptions?.upload?.folder) folder = path.join(this.publicPath, routeOptions.upload.folder);
-    if (!fs.existsSync(folder)) fs.mkdirSync(folder, { recursive: true });
+    const maxBytes = uploadOptions.maxBytes;
+    const maxKBps = uploadOptions.maxKBps;
+    const accept = uploadOptions.accept;
+
+    const folder = uploadOptions.directory || this.publicPath;
+    try {
+      if (!fs.existsSync(folder)) fs.mkdirSync(folder, { recursive: true });
+    } catch (err) {
+      console.error('upload directory init failed', err);
+      this.sendJson(res, 500, { success: false, message: 'Unable to prepare upload directory' });
+      req.destroy();
+      return;
+    }
 
     let totalBytes = 0, lastTick = Date.now(), bytesSinceLast = 0;
     let state = { headers:null, name:null, origFilename:null, filename:null, contentType:null, stream:null, tempPath:null };
@@ -468,8 +524,8 @@ class HttpService {
           if (accept.length && !accept.includes(state.contentType)) { this.sendJson(res,415,{success:false,message:'Unsupported Media Type'}); req.destroy(); return; }
 
           let finalName = state.origFilename;
-          if (routeOptions?.upload?.naming && typeof routeOptions.upload.naming === 'function') {
-            try { finalName = routeOptions.upload.naming(state.origFilename, req); } catch(e) { finalName = this._randomFilename(state.origFilename); }
+          if (uploadOptions?.naming && typeof uploadOptions.naming === 'function') {
+            try { finalName = uploadOptions.naming(state.origFilename, req); } catch(e) { finalName = this._randomFilename(state.origFilename); }
           } else {
             finalName = this._randomFilename(state.origFilename);
           }
@@ -514,8 +570,18 @@ class HttpService {
     if (contentType.includes('multipart/form-data')) return this._handleMultipartStream(req, res, routeOptions, cb);
 
     // raw body upload (small)
-    const maxBytes = (routeOptions && routeOptions.upload && routeOptions.upload.maxBytes) || this.uploadDefaultLimit;
-    const maxKBps = (routeOptions && routeOptions.upload && routeOptions.upload.maxKBps) || this.uploadDefaultMaxKBps || null;
+    let uploadOptions;
+    try {
+      uploadOptions = this._normalizeUploadOptions(routeOptions?.upload || {});
+    } catch (err) {
+      console.error('upload path resolution error', err);
+      this.sendJson(res, 500, { success: false, message: 'Upload path configuration error' });
+      req.destroy();
+      return;
+    }
+
+    const maxBytes = uploadOptions.maxBytes;
+    const maxKBps = uploadOptions.maxKBps;
     let total = 0; let lastTick = Date.now(); let bytesSince = 0;
     const chunks = [];
     req.on('data', chunk => {

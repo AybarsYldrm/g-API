@@ -60,10 +60,11 @@ class PadesService {
   getUploadOptions() {
     const cfg = this.config.upload || {};
     const maxBytes = parsePositiveInt(cfg.maxBytes, 20 * 1024 * 1024);
-    const folder = cfg.directory || path.join(process.cwd(), 'data', 'uploads', 'pades');
+    const directory = path.resolve(cfg.directory || path.join(process.cwd(), 'data', 'uploads', 'pades'));
     const accept = Array.isArray(cfg.accept) && cfg.accept.length ? cfg.accept.slice() : DEFAULT_UPLOAD_ACCEPT.slice();
     return {
-      folder,
+      directory,
+      baseDir: directory,
       maxBytes,
       accept,
       naming: (orig) => this.#buildUploadName(orig)
