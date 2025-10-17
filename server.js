@@ -17,6 +17,8 @@ const { CertificateAuthorityService } = require('./src/services/pki/CertificateA
 const registerPkiRoutes = require('./src/routes/pki');
 const { WebPushService } = require('./src/services/webpush/WebPushService');
 const { PERMISSIONS } = require('./src/utils/permissions');
+const { PadesService } = require('./src/services/pades/PadesService');
+const registerPadesRoutes = require('./src/routes/pades');
 const config = require('./config');
 
 (async () => {
@@ -98,6 +100,10 @@ const config = require('./config');
 
   registerRestRoutes(http, { db });
   registerPkiRoutes(http, { pkiService });
+  const padesService = (config.pades && config.pades.enabled !== false && pkiService)
+    ? new PadesService({ pkiService, config: config.pades })
+    : null;
+  registerPadesRoutes(http, { padesService, downloadService });
 
   if (webPushService) {
     const clientIp = (req) => {
