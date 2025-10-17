@@ -2,6 +2,7 @@
 
 const crypto = require('crypto');
 const { permissionMaskFrom, normalizePermissionMask } = require('../src/utils/permissions');
+const { parseStringList } = require('./utils');
 
 const sessionTtlSeconds = Number(process.env.SESSION_TTL_SECONDS || 3600);
 
@@ -60,6 +61,7 @@ const downloadTokenSecret = process.env.DOWNLOAD_TOKEN_SECRET
   || sessionJwk.k
   || crypto.createHash('sha256').update('graph-api-download-secret').digest('hex');
 const downloadTokenTtlSeconds = Number(process.env.DOWNLOAD_TOKEN_TTL || 300);
+const allowedOrigins = parseStringList(process.env.SECURITY_ALLOWED_ORIGINS, ['https://fitfak.net', 'http://localhost']);
 
 module.exports = {
   sessionCookieName: process.env.SESSION_COOKIE_NAME || 'ms_session',
@@ -73,6 +75,7 @@ module.exports = {
   rolePermissionMap,
   defaultPermissionMask,
   operationEpoch: Number(process.env.OPERATION_EPOCH_MS || Date.UTC(2023, 0, 1)),
+  allowedOrigins,
   downloadTokens: {
     secret: downloadTokenSecret,
     ttlSeconds: Number.isFinite(downloadTokenTtlSeconds) ? downloadTokenTtlSeconds : 300
