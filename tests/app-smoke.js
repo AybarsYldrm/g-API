@@ -25,6 +25,11 @@ module.exports = async function runAppSmoke() {
   });
 
   assert.ok(Array.isArray(http.routes) && http.routes.length > 0, 'Expected HTTP routes to be registered');
+  assert.strictEqual(
+    config.pades?.tsaOptions?.allowMissingNonce,
+    true,
+    'PAdES config should allow TSA responses that omit the nonce by default'
+  );
 
   await shutdownAppContext(context);
 };

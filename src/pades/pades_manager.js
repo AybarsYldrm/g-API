@@ -39,6 +39,11 @@ class PAdESManager {
     }
   }
 
+  #shouldAllowMissingNonce() {
+    const opt = this.tsaOptions ? this.tsaOptions.allowMissingNonce : undefined;
+    return opt === undefined ? true : opt !== false;
+  }
+
   _logDebug(message, context) {
     if (this.logger && typeof this.logger.debug === 'function') {
       this.logger.debug(message, context || {});
@@ -72,7 +77,7 @@ class PAdESManager {
     // TSA hash seçimi
     const tsHashName = (this.tsaOptions.hashName || 'sha256').toLowerCase();
     const tsHashOid  = HASH_NAME_TO_OID[tsHashName] || OIDS.sha256;
-    const allowMissingNonce = this.tsaOptions.allowMissingNonce;
+    const allowMissingNonce = this.#shouldAllowMissingNonce();
 
     const tbsHash = writer.computeByteRangeHash(tsHashName);
     this._logDebug('DocTimeStamp.byteRangeHash', { hashAlgorithm: tsHashName, digest: tbsHash.toString('hex') });
@@ -195,7 +200,7 @@ class PAdESManager {
     // İmza Zaman Damgası (RFC3161) — signatureValue üzerinde
     const tsHashName = (this.tsaOptions.hashName || 'sha256').toLowerCase();
     const tsHashOid  = HASH_NAME_TO_OID[tsHashName] || OIDS.sha256;
-    const allowMissingNonce = this.tsaOptions.allowMissingNonce;
+    const allowMissingNonce = this.#shouldAllowMissingNonce();
 
     const sigValHash = this._hashSignatureForTimestamp(signatureValue, tsHashName);
     this._logDebug('PAdES.signatureTimestamp.hash', {

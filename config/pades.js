@@ -24,7 +24,7 @@ module.exports = {
   tsaOptions: {
     hashName: process.env.PADES_TSA_HASH || process.env.PADES_TSA_HASH_NAME || 'sha256',
     certReq: parseBoolean(process.env.PADES_TSA_CERT_REQ, true) !== false,
-    allowMissingNonce: parseBoolean(process.env.PADES_TSA_ALLOW_MISSING_NONCE, false) === true,
+    allowMissingNonce: parseBoolean(process.env.PADES_TSA_ALLOW_MISSING_NONCE, true) !== false,
     reqPolicyOid: process.env.PADES_TSA_POLICY_OID || null,
     nonceBytes: parseNumber(process.env.PADES_TSA_NONCE_BYTES, undefined)
   },
