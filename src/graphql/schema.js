@@ -3,8 +3,9 @@
 const { sanitizeUser, ensureOwnership } = require('../utils/security');
 
 const asEvent = (event) => ({ ...event, __type: 'Event' });
+const asPushSubscription = (sub) => ({ ...sub, __type: 'WebPushSubscription' });
 
-module.exports = ({ db }) => ({
+module.exports = ({ db, webPushService }) => ({
   Query: {
     me: {
       auth: true,
@@ -26,7 +27,15 @@ module.exports = ({ db }) => ({
         ensureOwnership(ctx.user, event.ownerId);
         return asEvent(event);
       }
-    }
+    },
+    myPushSubscriptions: {
+      auth: true,
+      resolve: async (_, __, ctx) => {
+        if (!ctx.webPushService) return [];
+        const list = await ctx.webPushService.listByOwner(ctx.user.id);
+        return list.map(asPushSubscription);
+      }
+    },
   },
   Mutation: {
     createEvent: {
@@ -82,6 +91,28 @@ module.exports = ({ db }) => ({
         await db.remove('events', existing.id);
         return { success: true };
       }
+    },
+    registerPushSubscription: {
+      auth: true,
+      resolve: async (_, args, ctx) => {
+        if (!ctx.webPushService) throw new Error('Web push is not enabled');
+        const input = args && args.input;
+        if (!input) throw new Error('input is required');
+        const result = await ctx.webPushService.subscribeForUser(ctx.user, input, {
+          userAgent: ctx.req?.headers?.['user-agent'] || null,
+        });
+        return asPushSubscription(result.subscription);
+      }
+    },
+    unregisterPushSubscription: {
+      auth: true,
+      resolve: async (_, args, ctx) => {
+        if (!ctx.webPushService) return { success: false };
+        const identifier = (args && (args.id || args.endpoint)) || null;
+        if (!identifier) throw new Error('id or endpoint is required');
+        const removed = await ctx.webPushService.unsubscribe(ctx.user.id, identifier);
+        return { success: removed };
+      }
     }
   },
   types: {
@@ -91,6 +122,16 @@ module.exports = ({ db }) => ({
         resolve: async (event, _, ctx) => {
           const user = await db.findOne('users', { id: event.ownerId });
           ensureOwnership(ctx.user, event.ownerId);
+          return sanitizeUser(user);
+        }
+      }
+    },
+    WebPushSubscription: {
+      owner: {
+        auth: true,
+        resolve: async (sub, _, ctx) => {
+          ensureOwnership(ctx.user, sub.ownerId);
+          const user = await db.findOne('users', { id: sub.ownerId });
           return sanitizeUser(user);
         }
       }

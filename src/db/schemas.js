@@ -62,6 +62,23 @@ const SCHEMAS = {
       userId: { type: 'ID', required: true },
       eventId: { type: 'ID', required: true }
     }
+  },
+  webpushSubscriptions: {
+    type: 'webpush_subscription',
+    version: 1,
+    operationCode: 4,
+    fields: {
+      id: { type: 'ID' },
+      type: { type: 'String' },
+      schemaVersion: { type: 'Int' },
+      createdAt: { type: 'Date' },
+      updatedAt: { type: 'Date' },
+      ownerId: { type: 'ID', required: true },
+      endpoint: { type: 'String', required: true },
+      keys: { type: 'Object', required: true },
+      userAgent: { type: 'String' },
+      lastSentAt: { type: 'Date' }
+    }
   }
 };
 
