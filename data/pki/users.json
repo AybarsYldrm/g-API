@@ -1,0 +1,21 @@
+[
+  {
+    "id": "0ae29fe7-6b58-42a7-825a-4ffcadbb8276",
+    "email": "2024101163@cumhuriyet.edu.tr",
+    "name": "SELAHATTİN AYBARS YILDIRIM"
+  },
+  {
+    "id": "369451074249031696",
+    "email": "aybarsyildirim.mail@gmail.com",
+    "name": "Aybars Yıldırım",
+    "certificate": {
+      "serial": "65d6fdc406eb01ba59c91f58fbf5810d",
+      "issuedAt": "2025-10-16T11:46:41.971Z",
+      "notAfter": "2026-04-14T11:46:41.971Z",
+      "certPath": "C:\\Users\\Aybars Yıldırım\\Desktop\\gAPI-main\\data\\pki\\users\\369451074249031696\\certs\\cert.pem",
+      "csrPath": "C:\\Users\\Aybars Yıldırım\\Desktop\\gAPI-main\\data\\pki\\users\\369451074249031696\\csrs\\request.csr.pem",
+      "keyPath": "C:\\Users\\Aybars Yıldırım\\Desktop\\gAPI-main\\data\\pki\\users\\369451074249031696\\keys\\key.pem",
+      "publicKeyPath": "C:\\Users\\Aybars Yıldırım\\Desktop\\gAPI-main\\data\\pki\\users\\369451074249031696\\keys\\pub.pem"
+    }
+  }
+]

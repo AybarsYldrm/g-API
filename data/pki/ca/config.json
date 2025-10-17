@@ -1,0 +1,22 @@
+{
+  "subjectJson": {
+    "C": "TR",
+    "ST": "Sivas",
+    "L": "Merkez",
+    "O": "Fitfak",
+    "OU": "Fitfak Root CA",
+    "CN": "Fitfak Root Certificate Authority"
+  },
+  "keyType": "EC",
+  "curve": "prime256v1",
+  "ecPrivateKeyFormat": "pkcs8",
+  "createdAt": "2025-10-16T11:46:19.418Z",
+  "services": {
+    "ocspUrl": "https://fitfak.net/ocsp",
+    "crlUrl": "https://fitfak.net/crl",
+    "caIssuersUrl": "https://fitfak.net/aia/ca.crt"
+  },
+  "ocspNextUpdateSeconds": 43200,
+  "crlNextUpdateSeconds": 604800,
+  "autoRenewThresholdDays": 30
+}

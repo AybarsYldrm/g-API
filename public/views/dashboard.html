@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Dashboard</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+  </head>
+  <body>
+    <main class="container">
+      <h1>Dashboard</h1>
+      <section id="status">Loading profile…</section>
+      <section>
+        <h2>Your events</h2>
+        <ul id="event-list"></ul>
+      </section>
+    </main>
+    <script>
+      async function loadProfile() {
+        try {
+          const res = await fetch('/api/me', { credentials: 'include' });
+          if (!res.ok) throw new Error('Unable to load profile');
+          const data = await res.json();
+          document.getElementById('status').textContent = `Hello ${data.user?.name || 'user'}`;
+        } catch (err) {
+          document.getElementById('status').textContent = err.message;
+        }
+      }
+
+      async function loadEvents() {
+        try {
+          const res = await fetch('/api/events', { credentials: 'include' });
+          if (!res.ok) throw new Error('Unable to load events');
+          const data = await res.json();
+          const list = document.getElementById('event-list');
+          list.innerHTML = '';
+          data.events.forEach((event) => {
+            const li = document.createElement('li');
+            li.textContent = `${event.title} (${event.startsAt} → ${event.endsAt})`;
+            list.appendChild(li);
+          });
+          if (!data.events.length) {
+            const li = document.createElement('li');
+            li.textContent = 'No events found';
+            list.appendChild(li);
+          }
+        } catch (err) {
+          document.getElementById('event-list').innerHTML = `<li>${err.message}</li>`;
+        }
+      }
+
+      loadProfile();
+      loadEvents();
+    </script>
+  </body>
+</html>

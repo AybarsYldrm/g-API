@@ -1,0 +1,112 @@
+:root {
+  color-scheme: light dark;
+  font-family: 'Segoe UI', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+  background-color: #f4f7fb;
+  line-height: 1.5;
+}
+
+body {
+  margin: 0;
+  padding: 2rem;
+  background: linear-gradient(180deg, rgba(15, 23, 42, 0.02) 0%, rgba(15, 23, 42, 0.12) 100%);
+  min-height: 100vh;
+  color: #111827;
+}
+
+@media (prefers-color-scheme: dark) {
+  body {
+    color: #f9fafb;
+    background: radial-gradient(circle at top, rgba(30, 64, 175, 0.35), rgba(15, 23, 42, 0.92));
+  }
+}
+
+main.container {
+  max-width: 720px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  background: rgba(255, 255, 255, 0.82);
+  border-radius: 24px;
+  padding: 2.5rem;
+  box-shadow: 0 32px 80px rgba(15, 23, 42, 0.18);
+  backdrop-filter: blur(12px);
+}
+
+@media (prefers-color-scheme: dark) {
+  main.container {
+    background: rgba(17, 24, 39, 0.75);
+    box-shadow: 0 32px 80px rgba(0, 0, 0, 0.45);
+  }
+}
+
+main.container h1 {
+  font-size: clamp(2rem, 4vw, 2.75rem);
+  margin: 0;
+}
+
+main.container p {
+  margin: 0;
+  font-size: 1.05rem;
+  color: rgba(15, 23, 42, 0.74);
+}
+
+@media (prefers-color-scheme: dark) {
+  main.container p {
+    color: rgba(229, 231, 235, 0.78);
+  }
+}
+
+nav ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+nav a {
+  text-decoration: none;
+  color: inherit;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.65rem 1.25rem;
+  border-radius: 999px;
+  border: 1px solid rgba(99, 102, 241, 0.4);
+  background: rgba(99, 102, 241, 0.08);
+  transition: transform 160ms ease, box-shadow 160ms ease, background 160ms ease;
+}
+
+nav a:hover,
+nav a:focus-visible {
+  background: rgba(79, 70, 229, 0.18);
+  transform: translateY(-2px);
+  box-shadow: 0 12px 24px rgba(79, 70, 229, 0.25);
+}
+
+.section {
+  border-radius: 18px;
+  padding: 1.5rem;
+  background: rgba(99, 102, 241, 0.08);
+  border: 1px solid rgba(99, 102, 241, 0.12);
+}
+
+.section h2 {
+  margin-top: 0;
+  font-size: 1.35rem;
+}
+
+.data-row {
+  display: grid;
+  grid-template-columns: 160px 1fr;
+  gap: 0.75rem;
+  font-size: 0.95rem;
+  margin-bottom: 0.4rem;
+}
+
+.data-row span {
+  font-weight: 600;
+  color: rgba(79, 70, 229, 0.9);
+}

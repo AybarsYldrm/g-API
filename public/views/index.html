@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>Graph API Platform</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="stylesheet" href="/assets/css/app.css" />
+  </head>
+  <body>
+    <main class="container">
+      <header>
+        <h1>Graph API Platform</h1>
+        <p>Secure Microsoft sign-in, PKI automation, and realtime notifications in one control panel.</p>
+      </header>
+
+      <section class="section">
+        <h2>Quick Links</h2>
+        <nav aria-label="Primary navigation">
+          <ul>
+            <li><a href="/dashboard">Dashboard</a></li>
+            <li><a href="/login">Microsoft Login</a></li>
+            <li><a href="/logout">Logout</a></li>
+          </ul>
+        </nav>
+      </section>
+
+      <section class="section">
+        <h2>Environment Snapshot</h2>
+        <div class="data-row"><span>Current time</span><div data-current-time>—</div></div>
+        <div class="data-row"><span>Download portal</span><div><a href="/download" rel="noopener">Token-based download</a></div></div>
+        <div class="data-row"><span>PKI endpoints</span><div><code>/crl</code>, <code>/ocsp</code>, <code>/aia/ca.crt</code></div></div>
+        <div class="data-row"><span>Web push</span><div><code>/push/vapid</code>, <code>/push/subscribe</code></div></div>
+      </section>
+    </main>
+    <script src="/assets/js/app.js" defer></script>
+  </body>
+</html>
